@@ -1,0 +1,17 @@
+services:
+  janus:
+    build: .docker/janus
+    command: ["janus", "--full-trickle"]
+    # Se o servidor tiver um endereço privado, descomente abaixo e substitua por seu IP público.
+    # Certifique-se de ter a porta 8088 liberada.
+    # command: "janus --full-trickle --nat-1-1=SEU_IP_PUBLICO"
+    network_mode: host
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
