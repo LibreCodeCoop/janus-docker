@@ -30,10 +30,7 @@ RUN cd /tmp && \
     rm -f /v$LIBSRTP_VERSION.tar.gz
 
 # JANUS
-
-#ARG JANUS_VERSION=1.2.2
-#ARG JANUS_VERSION=1.2.3
-ARG JANUS_VERSION=1.3.1
+ARG JANUS_VERSION=1.4.1
 RUN mkdir -p /usr/src/janus && \
     cd /usr/src/janus && \
     curl -L https://github.com/meetecho/janus-gateway/archive/v$JANUS_VERSION.tar.gz | tar -xz && \
