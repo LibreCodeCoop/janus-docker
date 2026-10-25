@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+version = 1
+SPDX-PackageName = "janus-docker"
+SPDX-PackageSupplier = "LibreCode Coop"
+
+# JSON has no comment syntax. Keep other files annotated with SPDX headers.
+[[annotations]]
+path = ["renovate.json"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 LibreCode Coop and contributors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
