@@ -23,7 +23,7 @@ setup() {
     (.enabledManagers | index("dockerfile") != null) and
     (.enabledManagers | index("custom.regex") != null) and
     (.customManagers | any(.[]; .depNameTemplate == "meetecho/janus-gateway" and .datasourceTemplate == "github-tags")) and
-    (.customManagers | any(.[]; .managerFilePatterns | any(.[]; contains("docker-image"))))
+    (.customManagers | any(.[]; .managerFilePatterns | any(.[]; contains("image-(ci|publish)"))))
   ' "$PROJECT_ROOT/renovate.json"
   [ "$status" -eq 0 ]
   [ "$output" = true ]
@@ -38,9 +38,9 @@ setup() {
 @test "release policy uses Git tags without helper scripts or version files" {
   [ ! -e "$PROJECT_ROOT/IMAGE_REVISION" ]
   [ ! -e "$PROJECT_ROOT/scripts/release-tag.sh" ]
-  grep -Fq 'type=match,pattern=^v(.*)$,group=1' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
-  grep -Fq 'latest=false' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
-  grep -Fq 'GITHUB_REF_NAME' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
+  grep -Fq 'v[0-9]' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'GITHUB_REF_NAME' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'sha-' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
 }
 
 @test "build inputs reject floating versions" {
@@ -62,8 +62,24 @@ setup() {
 }
 
 @test "Trivy SARIF SBOM and provenance are configured" {
-  grep -Fq 'upload-sarif' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
-  grep -Fq 'packages: write' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
-  grep -Fq 'provenance: mode=max' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
-  grep -Fq 'sbom: true' "$PROJECT_ROOT/.github/workflows/docker-image.yml"
+  grep -Fq 'upload-sarif' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
+  grep -Fq 'packages: write' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'provenance: mode=max' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'sbom: true' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+}
+
+@test "CI cannot publish; trusted main publishes SHA and release only promotes the digest" {
+  ! grep -Eq '^[[:space:]]+packages: write' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
+  grep -Fq 'workflow_call:' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
+  grep -Fq 'uses: ./.github/workflows/image-ci.yml' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq "push-by-digest=true" "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'imagetools create --tag' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  ! grep -Fq 'docker/build-push-action@' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+}
+
+@test "Renovate-controlled Trivy versions agree in CI and publication" {
+  ci=$(sed -n -E 's/^[[:space:]]+version: (v[0-9]+\.[0-9]+\.[0-9]+)$/\1/p' "$PROJECT_ROOT/.github/workflows/image-ci.yml")
+  pub=$(sed -n -E 's/^[[:space:]]+version: (v[0-9]+\.[0-9]+\.[0-9]+)$/\1/p' "$PROJECT_ROOT/.github/workflows/image-publish.yml")
+  [ -n "$ci" ]
+  [ "$ci" = "$pub" ]
 }
