@@ -71,7 +71,7 @@ setup() {
 @test "CI cannot publish; trusted main publishes SHA and release only promotes the digest" {
   ! grep -Eq '^[[:space:]]+packages: write' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
   grep -Fq 'workflow_call:' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
-  grep -Fq 'uses: ./.github/workflows/image-ci.yml' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'uses: $/.github/workflows/image-ci.yml' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
   grep -Fq "push-by-digest=true" "$PROJECT_ROOT/.github/workflows/image-publish.yml"
   grep -Fq 'imagetools create --tag' "$PROJECT_ROOT/.github/workflows/image-release.yml"
   ! grep -Fq 'docker/build-push-action@' "$PROJECT_ROOT/.github/workflows/image-release.yml"
