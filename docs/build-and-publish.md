@@ -18,7 +18,7 @@ Dependencies: Docker Engine/Buildx, Bats, jq and ShellCheck. After building the 
 
 GitHub Actions builds and tests linux/amd64 and linux/arm64. The image workflow performs vulnerability scanning with Trivy, saves SARIF reports, and publishes code scanning results for supported repositories. A daily scheduled image validation reevaluates vulnerabilities disclosed after the latest change.
 
-Other workflows independently verify REUSE, Actionlint, Zizmor, and DCO.
+Separate workflows validate REUSE, Actionlint, and Zizmor. The installed DCO Probot checks contributor sign-offs directly; no duplicate DCO workflow is maintained.
 
 ## Packaging limitations
 
