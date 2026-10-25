@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Security, licensing and updates
 
-- Dependabot scans GitHub Actions daily for version updates after a one-day routine cooldown; vulnerability-triggered security PRs operate independently when the repository enables Dependabot security updates.
+- Dependabot scans GitHub Actions daily for version updates after a seven-day routine stabilization period; vulnerability-triggered security PRs operate independently when the repository enables Dependabot security updates.
 - Renovate proposes upstream Janus version+commit, Alpine digest, and scanner version updates. Changes require review and tests; nothing auto-merges.
 - Trivy checks HIGH and CRITICAL vulnerabilities with available fixes, fails on an end-of-life OS image, and exports SARIF reports on every image build.
 - Daily image verification helps surface newly disclosed CVEs, even when the image repository itself has not changed. Responding to an alert still requires a new reviewed release and an explicitly controlled deployment.

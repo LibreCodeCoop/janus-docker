@@ -171,8 +171,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Reject reused release tag
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          if docker buildx imagetools inspect "$IMAGE:${{ steps.release.outputs.tag }}" >/dev/null 2>&1; then
+          if docker buildx imagetools inspect "$IMAGE:$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Image tag already exists; do not republish an immutable release" >&2
             exit 1
           fi
@@ -205,8 +207,9 @@ jobs:
       - name: Verify published manifest digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -eu
           test -n "$DIGEST"
           docker buildx imagetools inspect "$IMAGE@$DIGEST"
-          echo "Deploy by digest: $IMAGE:${{ steps.release.outputs.tag }}@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy by digest: $IMAGE:$RELEASE_TAG@$DIGEST" >> "$GITHUB_STEP_SUMMARY"

@@ -7,7 +7,7 @@ updates:
     schedule:
       interval: daily
     cooldown:
-      default-days: 1
+      default-days: 7
     groups:
       routine-actions:
         applies-to: version-updates
