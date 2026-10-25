@@ -91,6 +91,7 @@ setup() {
   grep -Fq 'uses: $/.github/workflows/image-release.yml' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
   grep -Fq 'needs: publish-commit' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
   grep -Fq 'gh release create' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq "github.event_name == 'push' && github.ref == 'refs/heads/main'" "$PROJECT_ROOT/.github/workflows/image-release.yml"
   grep -Fq -- '--generate-notes' "$PROJECT_ROOT/.github/workflows/image-release.yml"
   ! grep -Fq 'docker/build-push-action@' "$PROJECT_ROOT/.github/workflows/image-release.yml"
   ! grep -Fq 'tags:' "$PROJECT_ROOT/.github/workflows/image-release.yml"

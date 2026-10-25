@@ -16,6 +16,8 @@ permissions:
 jobs:
   publish-release:
     name: Tag scanned digest and create GitHub Release
+    # A reusable workflow must defend itself against invocation from pull requests.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
