@@ -1,10 +1,17 @@
 # SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-name: Publish commit image
+name: Publish image and GitHub Release
 
 on:
   push:
     branches: [main]
+    # Documentation-only changes do not create a new container release.
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
 
 permissions:
   contents: read
@@ -29,6 +36,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.staged.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -95,3 +104,13 @@ jobs:
           docker buildx imagetools inspect --raw "$IMAGE:sha-$GITHUB_SHA" > commit-index.json
           test "$(sha256sum commit-index.json | cut -d ' ' -f1)" = "${DIGEST#sha256:}"
           echo "Commit image: $IMAGE:sha-$GITHUB_SHA@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+  auto-release:
+    name: Automatically publish new version and GitHub Release
+    needs: publish-commit
+    permissions:
+      contents: write
+      packages: write
+    uses: $/.github/workflows/image-release.yml
+    with:
+      expected_digest: ${{ needs.publish-commit.outputs.digest }}

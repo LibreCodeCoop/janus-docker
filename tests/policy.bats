@@ -38,8 +38,8 @@ setup() {
 @test "release policy uses Git tags without helper scripts or version files" {
   [ ! -e "$PROJECT_ROOT/IMAGE_REVISION" ]
   [ ! -e "$PROJECT_ROOT/scripts/release-tag.sh" ]
-  grep -Fq 'v[0-9]' "$PROJECT_ROOT/.github/workflows/image-release.yml"
-  grep -Fq 'GITHUB_REF_NAME' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'pattern="^v' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'git tag --list' "$PROJECT_ROOT/.github/workflows/image-release.yml"
   grep -Fq 'sha-' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
 }
 
@@ -82,4 +82,30 @@ setup() {
   pub=$(sed -n -E 's/^[[:space:]]+version: (v[0-9]+\.[0-9]+\.[0-9]+)$/\1/p' "$PROJECT_ROOT/.github/workflows/image-publish.yml")
   [ -n "$ci" ]
   [ "$ci" = "$pub" ]
+}
+
+@test "post-merge releases require scanned artifact and never rebuild it" {
+  grep -Fq 'on:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'workflow_call:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'expected_digest:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'uses: $/.github/workflows/image-release.yml' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'needs: publish-commit' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'gh release create' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq -- '--generate-notes' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  ! grep -Fq 'docker/build-push-action@' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  ! grep -Fq 'tags:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+}
+
+@test "GitHub release write permissions remain separate from pull-request CI" {
+  ! grep -Eq '^[[:space:]]+contents: write' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
+  grep -Fq 'contents: write' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'GH_TOKEN:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  grep -Fq 'sha256:' "$PROJECT_ROOT/.github/workflows/image-release.yml"
+  ! grep -Fq 'gh release create' "$PROJECT_ROOT/.github/workflows/image-ci.yml"
+}
+
+@test "documentation-only changes cannot create new image releases" {
+  grep -Fq 'paths-ignore:' "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq -- "- 'docs/**'" "$PROJECT_ROOT/.github/workflows/image-publish.yml"
+  grep -Fq 'release image' "$PROJECT_ROOT/docs/releases.md" || grep -Fq 'GHCR' "$PROJECT_ROOT/docs/releases.md"
 }

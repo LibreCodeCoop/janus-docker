@@ -3,24 +3,34 @@ SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
 SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
-# Image tags and production releases
+# Automated image versions and releases
 
-## Version source and tags
+## Source of truth
 
-ARG JANUS_VERSION in the Dockerfile is the only source of the upstream Janus version; ARG JANUS_COMMIT pins its exact upstream source. Version changes go through reviewed PRs.
+The upstream Janus version is declared once in Dockerfile as ARG JANUS_VERSION; ARG JANUS_COMMIT pins the upstream source commit. Renovate updates both together in a reviewed PR.
 
-Git release tags are formatted as v<upstream>-r<revision>, for example v1.4.3-r1. Increment the revision for packaging-only changes without changing Janus itself. No separate version file or release script is needed; the release workflow validates the Git tag against Dockerfile. The post-merge workflow publishes a `sha-<full-commit>` image automatically; the release workflow only adds the reviewed version tag to that existing digest.
+After every relevant change merges into main (documentation-only changes are excluded), the publisher invokes the same Bats, image-build and Trivy checks used for pull requests. It then stages a new multi-platform OCI image by digest, scans **that exact digest** for both architectures, and assigns the GHCR tag sha-<full-commit> only when every security gate succeeds.
 
-OCI references are `sha-<full-commit>` after each successful push to main and a human-readable release (for example `1.4.3-r1`) after an approved Git tag. Both reference the same immutable multi-platform manifest. We do not publish latest or floating major/minor release aliases.
+## Automatic Git tags, GHCR tags and GitHub Releases
 
-## Release procedure
+The successful main publisher directly calls image-release.yml as a reusable workflow. It does not depend on a tag-push event.
 
-1. Review upstream compatibility and pass all security, policy and image checks.
-2. Merge a reviewed DCO-compliant PR.
-3. Wait for the successful main-branch image workflow: the commit image must exist in GHCR, include amd64/arm64, and have passed the security gate against its exact digest.
-4. Create a **new annotated and signed release tag** from that approved commit on main.
-5. The tag workflow verifies upstream version and main ancestry, rejects an existing release tag, and promotes the already published SHA image **without recompilation**. SBOM and provenance are preserved with the original index. Record the unchanged digest.
+The release workflow:
 
-Production must select the version tag **and immutable manifest digest**. Rollback preserves the old digest and configuration. Replacing Janus interrupts active calls: rehearse with actual signaling and client networks and schedule a window.
+1. Verifies that the image digest came from the preceding publish job and that the immutable commit tag still points to it, and checks both linux/amd64 and linux/arm64.
+2. Reads the upstream version from Dockerfile; discovers existing v<upstream>-rN Git tags and selects the next revision. A new upstream version starts at r1.
+3. Promotes the **unchanged OCI index** to the versioned GHCR tag; refuses to overwrite an existing tag with a different digest.
+4. Creates the matching Git tag and GitHub Release with generated change notes and the exact deployable image digest.
 
-Release tags created before the corresponding commit image is published will fail safely; retry after main succeeds. The sample docker-compose.yml only demonstrates consuming published digest-pinned images. It cannot be used to configure the ADA deployment.
+Example: merging a reviewed dependency update publishes ghcr.io/librecodecoop/janus:sha-<commit>, then automatically publishes ghcr.io/librecodecoop/janus:1.4.3-r2 and GitHub Release v1.4.3-r2, referencing the identical digest. No IMAGE_REVISION, release-tag helper, or manual tagging is necessary.
+
+GitHub Actions uses the built-in GITHUB_TOKEN with write permission only in the publish/release jobs. Tags created using this token **do not trigger another workflow**; the release is created in the same successful invocation. GitHub-created tags are not GPG-signed: verified signed commits, DCO, BuildKit provenance and SBOM remain separate controls. Cryptographic tag signatures would require dedicated credentials and a separate security decision.
+
+## Failure handling and production
+
+- A failing Bats build or HIGH/CRITICAL Trivy gate prevents image publication and the subsequent GitHub Release.
+- Release tags advance monotonically per upstream version. Retrying a release for the same commit reuses its already assigned tag; it never overwrites a tag associated with a different digest.
+- Main publishers are serialized by workflow concurrency. Failed release jobs can be retried without manual tag creation.
+- This repository does **not** deploy to ADA or any other host. Real call testing, an approved maintenance window and a rollback plan remain separate.
+
+The sample docker-compose.yml consumes only an already published image with both tag and immutable digest.

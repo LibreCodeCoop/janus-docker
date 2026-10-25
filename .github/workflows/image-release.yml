@@ -1,31 +1,30 @@
 # SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-name: Promote release
+name: Publish GitHub Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_call:
+    inputs:
+      expected_digest:
+        description: Scanned multi-platform OCI index digest published by main
+        required: true
+        type: string
 
 permissions:
   contents: read
 
-concurrency:
-  group: janus-release-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  IMAGE: ghcr.io/librecodecoop/janus
-
 jobs:
   publish-release:
-    name: Promote reviewed commit digest to release tag
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Tag scanned digest and create GitHub Release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
+    env:
+      IMAGE: ghcr.io/librecodecoop/janus
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout the verified main commit, including existing tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -35,35 +34,94 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify tag matches upstream and an approved main commit
+      - name: Validate previously scanned artifact and select next revision
+        id: version
         shell: bash
+        env:
+          EXPECTED_DIGEST: ${{ inputs.expected_digest }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Authenticate Git fetch even if this repository is later made private.
+          gh auth setup-git
+          [[ "$EXPECTED_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
           upstream="$(sed -n -E 's/^ARG JANUS_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' Dockerfile)"
-          test -n "$upstream"
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$ ]]
-          [[ "$GITHUB_REF_NAME" == "v$upstream"-r* ]]
+          [[ "$upstream" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git fetch --force --tags origin
           git fetch --no-tags origin main
-          # HEAD is the resolved commit even when the Git ref is an annotated tag.
-          commit="$(git rev-parse 'HEAD^{commit}')"
-          git merge-base --is-ancestor "$commit" origin/main
-      - name: Promote the existing tested commit manifest, without rebuilding
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_tag="${GITHUB_REF_NAME#v}"
-          commit="$(git rev-parse 'HEAD^{commit}')"
-          source_image="$IMAGE:sha-$commit"
-          release_image="$IMAGE:$release_tag"
-          if docker buildx imagetools inspect "$release_image" >/dev/null 2>&1; then
-            echo "Release image already exists: $release_image" >&2
-            exit 1
-          fi
-          docker buildx imagetools inspect --raw "$source_image" > source-index.json
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+          docker buildx imagetools inspect --raw "$IMAGE:sha-$GITHUB_SHA" > source-index.json
+          actual="sha256:$(sha256sum source-index.json | cut -d ' ' -f1)"
+          test "$actual" = "$EXPECTED_DIGEST"
           jq -e '[.manifests[] | select(.platform.os == "linux") | .platform.architecture] |
             (index("amd64") != null and index("arm64") != null)' source-index.json
-          docker buildx imagetools create --tag "$release_image" "$source_image"
-          docker buildx imagetools inspect --raw "$release_image" > release-index.json
+
+          pattern="^v${upstream//./\\.}-r[1-9][0-9]*$"
+          existing="$(git tag --list "v$upstream-r*" --points-at "$GITHUB_SHA" |
+            grep -E "$pattern" | sort -V | tail -n 1 || true)"
+          if [[ -n "$existing" ]]; then
+            tag="$existing"
+          else
+            last="$(git tag --list "v$upstream-r*" |
+              grep -E "$pattern" | sort -V | tail -n 1 || true)"
+            revision=0
+            if [[ -n "$last" ]]; then
+              revision="${last##*-r}"
+            fi
+            tag="v$upstream-r$((revision + 1))"
+          fi
+          printf 'tag=%s\nversion=%s\noci_tag=%s\n' "$tag" "$upstream" "${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Promote the unchanged index to a versioned GHCR tag
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.oci_tag }}
+          EXPECTED_DIGEST: ${{ inputs.expected_digest }}
+        run: |
+          set -euo pipefail
+          release_image="$IMAGE:$TAG"
+          if docker buildx imagetools inspect "$release_image" >/dev/null 2>&1; then
+            docker buildx imagetools inspect --raw "$release_image" > release-index.json
+            test "sha256:$(sha256sum release-index.json | cut -d ' ' -f1)" = "$EXPECTED_DIGEST"
+          else
+            docker buildx imagetools create --tag "$release_image" "$IMAGE@$EXPECTED_DIGEST"
+            docker buildx imagetools inspect --raw "$release_image" > release-index.json
+          fi
           cmp source-index.json release-index.json
-          digest="sha256:$(sha256sum release-index.json | cut -d ' ' -f1)"
-          echo "Release image: $release_image@$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Create release with digest and automatically generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          JANUS_VERSION: ${{ steps.version.outputs.version }}
+          OCI_TAG: ${{ steps.version.outputs.oci_tag }}
+          EXPECTED_DIGEST: ${{ inputs.expected_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            echo "GitHub Release already exists: $TAG"
+          else
+            cat > release-notes.md <<NOTES
+          ## Container image
+
+          - Versioned image: \`$IMAGE:$OCI_TAG\`
+          - Immutable deployment reference: \`$IMAGE:$OCI_TAG@$EXPECTED_DIGEST\`
+          - Verified source commit: \`$GITHUB_SHA\`
+          - Architectures: linux/amd64 and linux/arm64
+          - Build provenance and SBOM accompany the OCI index
+
+          This release was generated after the reviewed main-branch build, Bats
+          checks and Trivy vulnerability scanning succeeded. The OCI manifest
+          was promoted without rebuilding. Deployments require separate approval.
+
+          NOTES
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Janus $JANUS_VERSION (container $OCI_TAG)" \
+              --notes-file release-notes.md \
+              --generate-notes
+          fi
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+          echo "GitHub Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production image: $IMAGE:$OCI_TAG@$EXPECTED_DIGEST" >> "$GITHUB_STEP_SUMMARY"
