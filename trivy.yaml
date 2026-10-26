@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+scan:
+  scanners:
+    - vuln
+vulnerability:
+  ignore-unfixed: true
+severity:
+  - HIGH
+  - CRITICAL
+exit-code: 1
+exit-on-eol: 1

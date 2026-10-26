@@ -1,0 +1,117 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Image CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: janus-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    name: Bats policy and release checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Bats
+        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # 4.0.0
+        with:
+          support-install: false
+          assert-install: false
+          detik-install: false
+          file-install: false
+      - name: Run policy tests
+        run: bats tests/policy.bats tests/release.bats tests/scan-images.bats
+      - name: ShellCheck vulnerability scanner wrapper
+        run: shellcheck scripts/scan-images.sh
+      - name: Validate immutable Compose example
+        shell: bash
+        run: |
+          tag="ci"
+          digest="sha256:$(printf '%064d' 0)"
+          JANUS_IMAGE_TAG="$tag" JANUS_IMAGE_DIGEST="$digest" docker compose config --quiet
+
+  image:
+    name: Build and Bats test (${{ matrix.platform }})
+    needs: policy
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Bats
+        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # 4.0.0
+        with:
+          support-install: false
+          assert-install: false
+          detik-install: false
+          file-install: false
+      - name: Enable ARM emulation
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build without publishing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          pull: true
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: janus-ci:verify
+          cache-from: type=gha,scope=janus-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=janus-${{ matrix.arch }}
+      - name: Run Bats runtime tests
+        env:
+          JANUS_TEST_IMAGE: janus-ci:verify
+        run: bats tests/image.bats
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.75.0
+          cache: true
+      - name: Scan image and export SARIF
+        run: bash scripts/scan-images.sh "janus@${{ matrix.platform }}=janus-ci:verify"
+      - name: Upload vulnerability report
+        if: always() && hashFiles('trivy-results/*.sarif') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-janus-${{ matrix.arch }}
+          path: trivy-results/*.sarif
+          if-no-files-found: error
+      - name: Publish SARIF to code scanning
+        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && hashFiles('trivy-results/*.sarif') != ''
+        uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3.39.1
+        with:
+          sarif_file: trivy-results/janus-linux-${{ matrix.arch }}.sarif
+          category: trivy-janus-linux-${{ matrix.arch }}

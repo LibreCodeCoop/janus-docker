@@ -1,0 +1,79 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "custom.regex"
+  ],
+  "dependencyDashboard": false,
+  "automerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update Meetecho Janus tag and corresponding immutable Git commit in one PR",
+      "managerFilePatterns": [
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-tags depName=meetecho/janus-gateway\\s+ARG JANUS_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s+ARG JANUS_COMMIT=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "meetecho/janus-gateway",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Update pinned Trivy CLI used for CI vulnerability scanning",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/image-(ci|publish)\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/actionlint\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=rhysd/actionlint[\\s\\S]*?rhysd/actionlint:(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "rhysd/actionlint",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/zizmor\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: \\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "versioningTemplate": "semver-coerced"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Review image base and upstream media server upgrades in PRs; never auto-merge production dependencies",
+      "matchManagers": [
+        "dockerfile",
+        "custom.regex"
+      ],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security"
+    ],
+    "automerge": false
+  }
+}

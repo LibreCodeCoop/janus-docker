@@ -1,17 +1,23 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Optional, standalone example. The actual Nextcloud HPB deployment lives elsewhere.
+# Both variables are REQUIRED. Never use :latest or build the image in production.
 services:
   janus:
-    build: .docker/janus
-    command: ["janus", "--full-trickle"]
-    # Se o servidor tiver um endereço privado, descomente abaixo e substitua por seu IP público.
-    # Certifique-se de ter a porta 8088 liberada.
-    # command: "janus --full-trickle --nat-1-1=SEU_IP_PUBLICO"
-    network_mode: host
+    image: ghcr.io/librecodecoop/janus:${JANUS_IMAGE_TAG:?Set reviewed image release tag}@${JANUS_IMAGE_DIGEST:?Set published sha256 digest}
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 256M
-        reservations:
-          cpus: '0.5'
-          memory: 128M
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    # A running deployment must supply its own Janus configuration and
+    # network/UDP rules. This example intentionally publishes no ports.
+    volumes:
+      - type: bind
+        source: ./config
+        target: /usr/local/etc/janus
+        read_only: true
+        bind:
+          create_host_path: false

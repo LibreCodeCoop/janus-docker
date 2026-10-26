@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Publish image and GitHub Release
+
+on:
+  push:
+    branches: [main]
+    # Documentation-only changes do not create a new container release.
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: janus-commit-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/librecodecoop/janus
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    uses: $/.github/workflows/image-ci.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  publish-commit:
+    name: Publish tested commit image
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.staged.outputs.digest }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reject existing immutable commit image
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "Commit image already published; refusing to overwrite its tag" >&2
+            exit 1
+          fi
+      - name: Build OCI index with SBOM and provenance, staged by digest
+        id: staged
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          pull: true
+          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=ghcr.io/librecodecoop/janus,push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          cache-from: |
+            type=gha,scope=janus-amd64
+            type=gha,scope=janus-arm64
+          cache-to: type=gha,mode=max,scope=janus-publish
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.75.0
+          cache: true
+      - name: Scan the exact published OCI digest on both platforms
+        env:
+          DIGEST: ${{ steps.staged.outputs.digest }}
+        run: |
+          set -eu
+          test -n "$DIGEST"
+          bash scripts/scan-images.sh "janus@linux/amd64=$IMAGE@$DIGEST"
+          bash scripts/scan-images.sh "janus@linux/arm64=$IMAGE@$DIGEST"
+      - name: Preserve staged-image security results
+        if: always() && hashFiles('trivy-results/*.sarif') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-janus-staged
+          path: trivy-results/*.sarif
+          if-no-files-found: error
+      - name: Promote scanned digest to immutable commit tag
+        env:
+          DIGEST: ${{ steps.staged.outputs.digest }}
+        run: |
+          set -eu
+          docker buildx imagetools create --tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE@$DIGEST"
+          docker buildx imagetools inspect --raw "$IMAGE:sha-$GITHUB_SHA" > commit-index.json
+          test "$(sha256sum commit-index.json | cut -d ' ' -f1)" = "${DIGEST#sha256:}"
+          echo "Commit image: $IMAGE:sha-$GITHUB_SHA@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+  auto-release:
+    name: Automatically publish new version and GitHub Release
+    needs: publish-commit
+    permissions:
+      contents: write
+      packages: write
+    uses: $/.github/workflows/image-release.yml
+    with:
+      expected_digest: ${{ needs.publish-commit.outputs.digest }}

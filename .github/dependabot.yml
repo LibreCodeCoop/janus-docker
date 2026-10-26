@@ -1,11 +1,16 @@
+# SPDX-FileCopyrightText: 2026 LibreCode Coop and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
 version: 2
 updates:
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "daily"
-  - package-ecosystem: "docker"
-    directory: "/.docker/"
-    schedule:
-      interval: "daily"
+      interval: daily
+    cooldown:
+      default-days: 7
+    groups:
+      routine-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 10
