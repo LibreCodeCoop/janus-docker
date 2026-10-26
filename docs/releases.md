@@ -5,6 +5,26 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Automated image versions and releases
 
+## Where to find the official image
+
+- **Published container:** [GHCR package: LibreCode Janus](https://github.com/LibreCodeCoop/janus-docker/pkgs/container/janus), repository `ghcr.io/librecodecoop/janus`.
+- **Source code / Dockerfile:** [LibreCodeCoop/janus-docker](https://github.com/LibreCodeCoop/janus-docker) and its [Dockerfile](https://github.com/LibreCodeCoop/janus-docker/blob/main/Dockerfile).
+- **Approved release versions:** [GitHub Releases](https://github.com/LibreCodeCoop/janus-docker/releases).
+
+The following is the version **validated and deployed on the LibreCode ADA server on 25 October 2026**; it is a versioned example, not a floating alias or a guarantee that no newer release exists:
+
+```text
+ghcr.io/librecodecoop/janus:1.4.3-r1@sha256:7d9c1bd28bdbc7702de924ed8a676f5c1f11afa3abc888654d8d4fc8b78a00d2
+```
+
+Use the complete `tag@sha256:digest` reference in production:
+
+```bash
+docker pull ghcr.io/librecodecoop/janus:1.4.3-r1@sha256:7d9c1bd28bdbc7702de924ed8a676f5c1f11afa3abc888654d8d4fc8b78a00d2
+```
+
+Inspect newer releases and their digests before upgrading. This project deliberately does not publish a mutable `latest` tag, and the development `sha-<commit>` tags are not release approvals.
+
 ## Source of truth
 
 The upstream Janus version is declared once in Dockerfile as ARG JANUS_VERSION; ARG JANUS_COMMIT pins the upstream source commit. Renovate updates both together in a reviewed PR.
