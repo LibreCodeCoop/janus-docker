@@ -9,6 +9,8 @@ A maintained container image for the [Janus WebRTC Server](https://janus.conf.me
 
 Janus powers interactive audio and video applications. This project makes the official Meetecho server available as an independently managed container, without bundling an application, reverse proxy, TURN server, or signaling service.
 
+**Official container image:** [`ghcr.io/librecodecoop/janus`](https://github.com/LibreCodeCoop/janus-docker/pkgs/container/janus), published by LibreCode in GitHub Container Registry (GHCR). The [source and Dockerfile](https://github.com/LibreCodeCoop/janus-docker/blob/main/Dockerfile) are in this repository; [GitHub Releases](https://github.com/LibreCodeCoop/janus-docker/releases) list the approved versions. See [image references and immutable deployment digests](docs/releases.md) before deploying. Do not use the third-party `sucwangsr/janus-webrtc-gateway-docker` image for new installations.
+
 ## Why use this image?
 
 - **Infrastructure autonomy:** operate and upgrade the media gateway separately from other application services.
