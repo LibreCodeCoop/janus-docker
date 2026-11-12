@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Bats
-        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # 4.0.0
+        uses: bats-core/bats-action@3566550e0f594451ac0f58fcbfdeca93aa29a45e # 4.1.0
         with:
           support-install: false
           assert-install: false
@@ -66,7 +66,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Bats
-        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # 4.0.0
+        uses: bats-core/bats-action@3566550e0f594451ac0f58fcbfdeca93aa29a45e # 4.1.0
         with:
           support-install: false
           assert-install: false
@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: error
       - name: Publish SARIF to code scanning
         if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && hashFiles('trivy-results/*.sarif') != ''
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trivy-results/janus-linux-${{ matrix.arch }}.sarif
           category: trivy-janus-linux-${{ matrix.arch }}
